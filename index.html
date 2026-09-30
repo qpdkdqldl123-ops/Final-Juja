@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>i_or_bit · 휴대폰 성향 분석 부스</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- ============================================================
+  이 html 파일과 "같은 폴더"에 아래 파일들을 그대로 넣어주세요 (하위 폴더 없이 평평하게).
+    iob.jpg                ← 좌측 상단 로고
+    분석과정.png              ← 2번 페이지 이미지
+    지원금.png               ← 4번 페이지 상단 이미지
+    전체결과.png              ← 4번 페이지 하단 이미지
+    Intj.png Intp.png Entj.png Entp.png
+    Infj.png Infp.png Enfj.png Enfp.png
+    Istj.png Isfj.png Estj.png Esfj.png
+    Istp.png Isfp.png Estp.png Esfp.png
+    (MBTI 결과 이미지도 같은 폴더에 그대로, 앞글자만 대문자 + .png)
+============================================================ -->
+
+<link rel="stylesheet" as="style" crossorigin
+  href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<style>
+  :root{
+    --bg:#FFFFFF;
+    --panel:#FFFFFF;
+    --panel-soft:#F6F8FB;
+    --border:#E9ECF2;
+    --text:#20242C;
+    --text-soft:#767E8C;
+    --accent:#FF6F59;
+    --accent-deep:#E8543F;
+    --shadow:0 10px 26px rgba(30,40,60,0.08);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Pretendard', sans-serif;
+    min-height:100vh;
+  }
+
+  #logo-badge{
+    position:fixed; top:16px; left:16px; z-index:200;
+    width:46px; height:46px; border-radius:50%;
+    background:#fff; border:1px solid var(--border); box-shadow:var(--shadow);
+    display:flex; align-items:center; justify-content:center;
+    overflow:hidden; text-decoration:none; cursor:pointer;
+  }
+  #logo-badge img{width:100%; height:100%; object-fit:cover;}
+  #logo-badge .logo-fallback{font-size:11px; font-weight:800; color:var(--accent-deep);}
+
+  .page-tabs{
+    position:fixed; top:16px; right:16px; z-index:200;
+    display:flex; gap:6px; background:#fff;
+    border:1px solid var(--border); border-radius:20px; padding:5px; box-shadow:var(--shadow);
+  }
+  .page-tabs button{
+    width:30px; height:30px; border-radius:50%; border:none;
+    background:transparent; color:var(--text-soft); font-weight:700; font-size:12px; cursor:pointer;
+  }
+  .page-tabs button.active{background:var(--accent); color:#fff;}
+
+  .app-wrap{max-width:520px; margin:0 auto; padding:80px 20px 110px 20px; min-height:100vh;}
+  .page{display:none;}
+  .page.active{display:block;}
+
+  h2.page-title{font-size:20px; font-weight:800; margin:0 0 4px 0;}
+  p.page-sub{font-size:12.5px; color:var(--text-soft); margin:0 0 20px 0;}
+
+  .panel{background:var(--panel); border:1px solid var(--border); border-radius:20px; padding:20px; box-shadow:var(--shadow);}
+
+  .bottom-nav{
+    position:fixed; bottom:0; left:0; right:0;
+    background:linear-gradient(to top, #fff 65%, transparent);
+    padding:22px 20px 20px 20px; display:flex; justify-content:center; gap:10px; z-index:150;
+  }
+  .nav-btn{
+    flex:1; max-width:160px; padding:13px 0; border-radius:999px; border:1px solid var(--border);
+    background:#fff; color:var(--text); font-size:14px; font-weight:700; cursor:pointer;
+  }
+  .nav-btn.primary{background:var(--accent); color:#fff; border:none;}
+  .nav-btn:disabled{opacity:0.35; cursor:not-allowed;}
+
+  label.field-label{display:block; font-size:12px; color:var(--text-soft); margin:14px 0 6px 0;}
+  input.field{
+    width:100%; padding:13px 15px; border-radius:14px;
+    border:1.5px solid var(--border); background:var(--panel-soft); color:var(--text); font-size:16px;
+  }
+  input.field:focus{outline:none; border-color:var(--accent); background:#fff;}
+
+  .scanid-row{display:flex; align-items:center; gap:8px;}
+  .scanid-box{
+    width:56px; text-align:center; padding:13px 0; border-radius:14px;
+    border:1.5px solid var(--border); background:var(--panel-soft); color:var(--text);
+    font-size:18px; font-weight:800;
+  }
+  .scanid-box.wide{flex:1; width:auto;}
+  .scanid-box:focus{outline:none; border-color:var(--accent); background:#fff;}
+  .scanid-dash{font-size:18px; font-weight:800; color:var(--text-soft);}
+
+  .btn{
+    display:inline-block; padding:13px 20px; border-radius:999px; border:none;
+    background:var(--accent); color:#fff; font-weight:800; font-size:14px; cursor:pointer;
+    box-shadow:0 8px 18px rgba(255,111,89,0.28);
+  }
+
+  /* ---------- 1페이지: 연락처 리스트 + QR ---------- */
+  .contact-list{list-style:none; margin:12px 0 0 0; padding:0; max-height:240px; overflow-y:auto;}
+  .contact-list li{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:11px 12px; border-radius:12px; cursor:pointer; font-size:13.5px; gap:8px;
+  }
+  .contact-list li:hover{background:var(--panel-soft);}
+  .contact-list .c-info{flex:1; display:flex; flex-direction:column; min-width:0;}
+  .contact-list .c-name{font-weight:700;}
+  .contact-list .c-phone{color:var(--text-soft); font-size:12px;}
+  .contact-list .c-delete{
+    flex-shrink:0; width:26px; height:26px; border-radius:50%; border:none;
+    background:var(--panel-soft); color:var(--text-soft); font-size:13px; font-weight:800;
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+  }
+  .contact-list .c-delete:hover{background:#FFE3DE; color:var(--accent-deep);}
+
+  #qr-box{
+    margin-top:18px; padding:20px; background:var(--panel-soft); border-radius:18px;
+    display:flex; flex-direction:column; align-items:center; gap:10px;
+  }
+  #qr-box .qr-caption{color:var(--text); font-size:12.5px; font-weight:700;}
+  #qrcode{display:flex; justify-content:center; background:#fff; padding:10px; border-radius:12px;}
+  .btn-outline{
+    margin-top:4px; padding:10px 18px; border-radius:999px; border:1.5px solid var(--border);
+    background:#fff; color:var(--text); font-weight:700; font-size:13px; cursor:pointer;
+  }
+
+  #qr-fullview{
+    position:fixed; inset:0; background:#fff; z-index:140;
+    display:none; align-items:center; justify-content:center;
+  }
+  #qr-fullview.show{display:flex;}
+  .qr-full-inner{display:flex; flex-direction:column; align-items:center; gap:16px; padding:20px;}
+  #qrcode-full{background:#fff; padding:16px; border-radius:16px; box-shadow:var(--shadow);}
+
+  /* ---------- 이미지 프레임 (깨짐 방지 + 확대 가능) ---------- */
+  .image-frame{
+    width:100%; min-height:260px; border-radius:18px; overflow:hidden;
+    background:var(--panel-soft); border:1px solid var(--border);
+    display:flex; align-items:center; justify-content:center; margin-top:10px;
+    position:relative;
+  }
+  .image-frame img{width:100%; height:100%; object-fit:contain; display:block; cursor:zoom-in;}
+  .image-frame .img-fallback{color:var(--text-soft); font-size:12.5px; text-align:center; padding:20px;}
+
+  /* ---------- 라이트박스(이미지 확대 보기) ---------- */
+  #lightbox{
+    position:fixed; inset:0; background:rgba(15,17,22,0.92);
+    display:flex; align-items:center; justify-content:center; z-index:140; padding:0;
+    opacity:0; visibility:hidden; transform:scale(0.94);
+    transition:opacity .25s ease, transform .25s ease, visibility .25s;
+    overflow:hidden; touch-action:none;
+  }
+  #lightbox.show{opacity:1; visibility:visible; transform:scale(1);}
+  #lightbox img{
+    max-width:100%; max-height:100%; object-fit:contain; border-radius:8px;
+    will-change:transform; touch-action:none; user-select:none; -webkit-user-drag:none;
+  }
+  #lightbox-close{
+    position:fixed; top:20px; right:20px; width:40px; height:40px; border-radius:50%;
+    background:rgba(255,255,255,0.15); color:#fff; border:none; font-size:18px; cursor:pointer;
+  }
+  #lightbox-id-tag{
+    position:fixed; top:20px; right:72px; z-index:1;
+    background:rgba(255,255,255,0.15); color:#fff; font-size:13px; font-weight:800;
+    padding:8px 14px; border-radius:999px; display:none;
+  }
+  #lightbox-id-tag.show{display:block;}
+
+  /* ---------- 3페이지: MBTI 토글 ---------- */
+  .mbti-row{display:flex; gap:10px; margin-top:14px;}
+  .mbti-box{
+    flex:1; aspect-ratio:1/1; border-radius:16px; border:1.5px solid var(--border);
+    background:var(--panel-soft); display:flex; align-items:center; justify-content:center;
+    font-size:26px; font-weight:900; cursor:pointer; user-select:none; color:var(--text);
+    transition:transform .12s ease;
+  }
+  .mbti-box:active{transform:scale(0.92);}
+  .mbti-box.on{background:var(--accent); color:#fff; border-color:var(--accent);}
+
+  #scan-overlay{
+    position:fixed; inset:0; background:rgba(255,255,255,0.94);
+    display:none; align-items:center; justify-content:center; flex-direction:column; gap:16px; z-index:500;
+  }
+  #scan-overlay.show{display:flex;}
+  .spinner{
+    width:60px; height:60px; border-radius:50%;
+    border:5px solid var(--border); border-top-color:var(--accent);
+    animation:spin 0.9s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  #scan-overlay p{color:var(--text-soft); font-size:13px; margin:0;}
+
+  .result-block{margin-top:18px;}
+  .id-chip{
+    display:inline-block; font-size:11.5px; color:var(--text-soft);
+    background:var(--panel-soft); border:1px solid var(--border);
+    border-radius:8px; padding:4px 10px; margin-bottom:10px;
+  }
+  .id-overlay{
+    position:absolute; top:14px; left:50%; transform:translateX(-50%);
+    background:rgba(20,22,28,0.62); color:#fff;
+    font-size:15px; font-weight:800; letter-spacing:0.5px;
+    padding:6px 16px; border-radius:999px; white-space:nowrap;
+  }
+
+  /* ---------- 연락처 잠금 (비밀번호) ---------- */
+  #pw-modal{
+    position:fixed; inset:0; background:rgba(20,22,28,0.55); z-index:520;
+    display:none; align-items:center; justify-content:center; padding:20px;
+  }
+  #pw-modal.show{display:flex;}
+  .pw-box{
+    width:100%; max-width:320px; background:#fff; border-radius:20px;
+    padding:22px 20px; box-shadow:var(--shadow); text-align:center;
+  }
+  .pw-box h3{font-size:15px; font-weight:800; margin:0 0 6px 0;}
+  .pw-box .pw-hint{font-size:11.5px; color:var(--text-soft); margin:0 0 14px 0;}
+  .pw-box input{
+    width:100%; text-align:center; letter-spacing:6px; font-size:20px; font-weight:800;
+    padding:12px 0; border-radius:14px; border:1.5px solid var(--border);
+    background:var(--panel-soft); color:var(--text); margin-bottom:8px;
+  }
+  .pw-box input:focus{outline:none; border-color:var(--accent); background:#fff;}
+  .pw-error{color:var(--accent-deep); font-size:11.5px; min-height:16px; margin-bottom:6px;}
+  .pw-actions{display:flex; gap:8px; margin-top:6px;}
+  .pw-actions button{flex:1;}
+
+  /* ---------- 3페이지: 그림판 ---------- */
+  .draw-thumb{
+    margin:14px auto 0 auto; width:140px; height:140px; border-radius:16px;
+    border:1.5px dashed var(--border); background:var(--panel-soft);
+    display:flex; align-items:center; justify-content:center; overflow:hidden;
+    cursor:pointer; position:relative;
+  }
+  .draw-thumb img{width:100%; height:100%; object-fit:contain; background:#fff;}
+  .draw-thumb .draw-thumb-empty{font-size:11px; color:var(--text-soft); text-align:center; line-height:1.5; padding:8px;}
+
+  #draw-fullscreen{
+    position:fixed; inset:0; background:#fff; z-index:530;
+    display:none; flex-direction:column;
+  }
+  #draw-fullscreen.show{display:flex;}
+  #draw-canvas{flex:1; width:100%; height:100%; touch-action:none; display:block;}
+  .draw-header-label{
+    position:absolute; top:18px; left:18px; font-size:16px; font-weight:900;
+    color:var(--text); z-index:2; pointer-events:none;
+  }
+  .draw-instructions{
+    position:absolute; top:54%; left:50%; transform:translate(-50%,0);
+    text-align:center; z-index:1; pointer-events:none;
+    font-size:13.5px; color:#C7CCD5; line-height:2; font-weight:700;
+  }
+  .draw-savebtn{
+    position:absolute; top:16px; right:16px; z-index:2;
+    padding:10px 18px; border-radius:999px; border:none;
+    background:var(--accent); color:#fff; font-weight:800; font-size:13px; cursor:pointer;
+    box-shadow:0 8px 18px rgba(255,111,89,0.28);
+  }
+  .draw-clearbtn{
+    position:absolute; bottom:20px; left:50%; transform:translateX(-50%); z-index:2;
+    padding:9px 16px; border-radius:999px; border:1.5px solid var(--border);
+    background:#fff; color:var(--text-soft); font-weight:700; font-size:12.5px; cursor:pointer;
+  }
+
+  /* ---------- 4페이지: 그림 저장 / 저장 리스트 ---------- */
+  #draw-save-view, #save-list-view{
+    position:fixed; inset:0; background:#fff; z-index:520;
+    display:none; flex-direction:column; padding:20px; overflow-y:auto;
+  }
+  #draw-save-view.show, #save-list-view.show{display:flex;}
+  .view-close{
+    align-self:flex-end; width:36px; height:36px; border-radius:50%; border:none;
+    background:var(--panel-soft); color:var(--text-soft); font-size:16px; cursor:pointer;
+  }
+  .draw-save-preview{
+    width:100%; max-width:320px; aspect-ratio:1/1; margin:10px auto 16px auto;
+    border-radius:18px; border:1px solid var(--border); overflow:hidden; background:#fff;
+  }
+  .draw-save-preview img{width:100%; height:100%; object-fit:contain;}
+  #save-list{list-style:none; margin:6px 0 0 0; padding:0;}
+  #save-list li{
+    display:flex; align-items:center; gap:10px; padding:12px 6px;
+    border-bottom:1px solid var(--border);
+  }
+  #save-list .sl-thumb{
+    width:46px; height:46px; border-radius:10px; overflow:hidden; flex-shrink:0;
+    background:var(--panel-soft); border:1px solid var(--border);
+  }
+  #save-list .sl-thumb img{width:100%; height:100%; object-fit:contain;}
+  #save-list .sl-info{flex:1; min-width:0;}
+  #save-list .sl-name{font-weight:700; font-size:13.5px;}
+  #save-list .sl-meta{font-size:11px; color:var(--text-soft); margin-top:2px;}
+  #save-list .sl-delete{
+    flex-shrink:0; width:26px; height:26px; border-radius:50%; border:none;
+    background:var(--panel-soft); color:var(--text-soft); font-size:13px; font-weight:800;
+    cursor:pointer;
+  }
+  #save-list .sl-delete:hover{background:#FFE3DE; color:var(--accent-deep);}
+</style>
+</head>
+<body>
+
+<a id="logo-badge" href="https://www.instagram.com/i_or_bit" target="_blank" rel="noopener">
+  <img src="iob.jpg" alt="iob"
+       onerror="this.style.display='none'; this.parentElement.querySelector('.logo-fallback').style.display='block';">
+  <span class="logo-fallback" style="display:none;">iob</span>
+</a>
+
+<div class="page-tabs" id="page-tabs">
+  <button data-page="1">1</button>
+  <button data-page="2">2</button>
+  <button data-page="3">3</button>
+  <button data-page="4">4</button>
+</div>
+
+<div class="app-wrap">
+
+  <!-- ============ 1. QR로 스크린타임 받기 ============ -->
+  <section class="page" id="page-1">
+    <h2 class="page-title">QR로 스크린타임 받기</h2>
+    <p class="page-sub">번호를 저장하면 그 번호로 문자를 보낼 수 있는 QR이 바로 생성돼요.</p>
+
+    <div class="panel">
+      <label class="field-label" style="margin-top:0;">이름</label>
+      <input class="field" id="input-name" type="text" placeholder="예) 홍길동">
+
+      <label class="field-label">전화번호</label>
+      <input class="field" id="input-phone" type="text" placeholder="예) 010xxxxxxxx / 050xxxxxxxx">
+
+      <div style="margin-top:16px;">
+        <button class="btn" id="btn-save-contact">저장하고 QR 만들기</button>
+      </div>
+
+      <div id="qr-box" style="display:none;">
+        <div class="qr-caption" id="qr-caption"></div>
+        <div id="qrcode"></div>
+        <button class="btn-outline" id="btn-qr-expand">QR 크게 보기</button>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:14px;">
+      <label class="field-label" style="margin-top:0;">저장된 번호 (모두에게 실시간 공유됨)</label>
+      <ul class="contact-list" id="contact-list">
+        <li style="color:var(--text-soft);">아직 저장된 번호가 없어요</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============ 2. 분석과정 사진 ============ -->
+  <section class="page" id="page-2">
+    <h2 class="page-title">분석과정</h2>
+    <p class="page-sub">스크린타임 데이터를 읽어들이는 중입니다.</p>
+    <div class="image-frame">
+      <img src="분석과정.png" alt="분석과정"
+           onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+      <div class="img-fallback" style="display:none;">분석과정.png 파일을 같은 폴더에 넣어주세요</div>
+    </div>
+  </section>
+
+  <!-- ============ 3. 간단 분석 ============ -->
+  <section class="page" id="page-3">
+    <h2 class="page-title">간단 분석</h2>
+    <p class="page-sub">식별번호를 확인하고, 성향 4칸을 눌러 유형을 맞춰주세요.</p>
+
+    <div class="panel">
+      <span class="id-chip">예시: 21</span>
+
+      <label class="field-label" style="margin-top:6px;">식별번호</label>
+      <div class="scanid-row">
+        <input class="scanid-box wide" id="scanid-number" type="text" inputmode="numeric" placeholder="21">
+      </div>
+
+      <label class="field-label">기질 선택(칸을 누르면 바뀝니다)</label>
+      <div class="mbti-row" id="mbti-row">
+        <div class="mbti-box on" data-index="0" data-a="E" data-b="I">E</div>
+        <div class="mbti-box on" data-index="1" data-a="N" data-b="S">N</div>
+        <div class="mbti-box on" data-index="2" data-a="F" data-b="T">F</div>
+        <div class="mbti-box on" data-index="3" data-a="J" data-b="P">J</div>
+      </div>
+
+      <label class="field-label">그림 (눌러서 그리기)</label>
+      <div class="draw-thumb" id="draw-thumb">
+        <div class="draw-thumb-empty" id="draw-thumb-empty">✎<br>눌러서<br>그리기</div>
+      </div>
+
+      <div style="margin-top:16px; text-align:center;">
+        <button class="btn" id="btn-analyze">분석</button>
+      </div>
+
+      <div class="result-block" id="mbti-result" style="display:none;">
+        <div class="image-frame" id="mbti-result-frame"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 4. 전체 결과 분석지 ============ -->
+  <section class="page" id="page-4">
+    <h2 class="page-title">전체 결과 분석지</h2>
+
+    <p class="page-sub" style="margin-top:16px;">지원금</p>
+    <div class="image-frame">
+      <img src="지원금.png" alt="지원금"
+           onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+      <div class="img-fallback" style="display:none;">지원금.png 파일을 같은 폴더에 넣어주세요</div>
+    </div>
+
+    <p class="page-sub" style="margin-top:18px;">전체결과</p>
+    <div class="image-frame">
+      <img src="전체결과.png" alt="전체결과"
+           onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+      <div class="img-fallback" style="display:none;">전체결과.png 파일을 같은 폴더에 넣어주세요</div>
+    </div>
+
+    <div style="margin-top:22px; text-align:center;">
+      <button class="btn" id="btn-draw-save" style="width:100%; max-width:280px;">그림 저장</button>
+    </div>
+    <div style="margin-top:10px; text-align:center;">
+      <button class="btn-outline" id="btn-save-list" style="width:100%; max-width:280px;">저장 리스트</button>
+    </div>
+
+    <div style="margin-top:22px; text-align:center;">
+      <button class="btn" id="btn-back-to-qr">돌아가기</button>
+    </div>
+  </section>
+
+</div>
+
+<div class="bottom-nav">
+  <button class="nav-btn" id="btn-prev">← 이전</button>
+  <button class="nav-btn primary" id="btn-next">다음 →</button>
+</div>
+
+<div id="scan-overlay">
+  <div class="spinner"></div>
+  <p>사용 패턴을 분석하는 중...</p>
+</div>
+
+<!-- QR 크게 보기 전체화면 (하단 이전/다음 버튼은 z-index로 항상 그 위에 유지됨) -->
+<div id="qr-fullview">
+  <div class="qr-full-inner">
+    <div id="qrcode-full"></div>
+    <button class="btn" id="btn-qr-collapse">원래 화면으로</button>
+  </div>
+</div>
+
+<!-- 이미지 확대 보기 -->
+<div id="lightbox">
+  <button id="lightbox-close">✕</button>
+  <div id="lightbox-id-tag"></div>
+  <img id="lightbox-img" src="" alt="">
+</div>
+
+<!-- 그림판 전체화면 -->
+<div id="draw-fullscreen">
+  <div class="draw-header-label">기질 데이터마이닝</div>
+  <div class="draw-instructions">
+    (1) 사람을 그려주세요!<br>
+    (2) 졸라맨은 안됩니다!<br>
+    (3) 표정을 제대로 묘사해주세요!
+  </div>
+  <canvas id="draw-canvas"></canvas>
+  <button class="draw-clearbtn" id="btn-draw-clear">전체 지우기</button>
+  <button class="draw-savebtn" id="btn-draw-save-close">저장</button>
+</div>
+
+<!-- 4페이지: 그림 저장 화면 -->
+<div id="draw-save-view">
+  <button class="view-close" id="btn-draw-save-view-close">✕</button>
+  <h2 class="page-title" style="text-align:center;">그림 저장</h2>
+  <div class="draw-save-preview">
+    <img id="draw-save-preview-img" src="" alt="그림">
+  </div>
+  <label class="field-label">저장 이름</label>
+  <input class="field" id="draw-save-name" type="text" placeholder="예) 홍길동의 그림">
+  <div style="margin-top:16px; text-align:center;">
+    <button class="btn" id="btn-draw-save-confirm">저장하기</button>
+  </div>
+</div>
+
+<!-- 4페이지: 저장 리스트 화면 -->
+<div id="save-list-view">
+  <button class="view-close" id="btn-save-list-close">✕</button>
+  <h2 class="page-title" style="text-align:center;">저장 리스트</h2>
+  <ul id="save-list">
+    <li style="color:var(--text-soft); justify-content:center;">아직 저장된 그림이 없어요</li>
+  </ul>
+</div>
+
+<!-- 연락처 비밀번호 모달 -->
+<div id="pw-modal">
+  <div class="pw-box">
+    <h3 id="pw-modal-title">비밀번호 확인</h3>
+    <p class="pw-hint" id="pw-modal-hint">힌트: 전화번호 끝 2자리</p>
+    <input id="pw-modal-input" type="text" inputmode="numeric" maxlength="2" placeholder="••">
+    <div class="pw-error" id="pw-modal-error"></div>
+    <div class="pw-actions">
+      <button class="btn-outline" id="pw-modal-cancel">취소</button>
+      <button class="btn" id="pw-modal-submit">확인</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===================== Firebase 설정 (제공해주신 값 그대로) ===================== */
+const firebaseConfig = {
+  apiKey: "AIzaSyCbQ2-KBymdOiyZcpw0KTApljRwlrEJ92U",
+  authDomain: "soul-list.firebaseapp.com",
+  databaseURL: "https://soul-list-default-rtdb.firebaseio.com",
+  projectId: "soul-list",
+  storageBucket: "soul-list.firebasestorage.app",
+  messagingSenderId: "692500738408",
+  appId: "1:692500738408:web:48067719acca5a5ac6e6dd",
+  measurementId: "G-J30Z69YXLD"
+};
+// 여기서는 Firestore만 쓰므로 compat SDK로 초기화합니다.
+// (analytics가 필요하면 firebase-analytics-compat.js 스크립트를 추가로 불러온 뒤
+//  firebase.analytics()를 호출하면 됩니다.)
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const contactsRef = db.collection('contacts');
+
+/* ===================== 이미지 경로 ===================== */
+const IMAGE_PATHS = {
+  mbtiFolder: '' // 같은 폴더에 있음. 예: Enfj.png
+};
+
+// "INTJ" -> "Intj" 로 변환 (맨 앞 글자만 대문자, 나머지 소문자)
+function toTitleCaseMBTI(code){
+  return code.charAt(0).toUpperCase() + code.slice(1).toLowerCase();
+}
+
+/* ===================== 페이지 내비게이션 ===================== */
+let currentPage = 1;
+const TOTAL_PAGES = 4;
+
+function goToPage(n){
+  document.getElementById('qr-fullview').classList.remove('show');
+  document.getElementById('lightbox').classList.remove('show');
+  document.getElementById('draw-fullscreen').classList.remove('show');
+  document.getElementById('draw-save-view').classList.remove('show');
+  document.getElementById('save-list-view').classList.remove('show');
+  document.getElementById('pw-modal').classList.remove('show');
+  currentPage = Math.min(Math.max(n, 1), TOTAL_PAGES);
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + currentPage).classList.add('active');
+  document.querySelectorAll('.page-tabs button').forEach(btn => {
+    btn.classList.toggle('active', Number(btn.dataset.page) === currentPage);
+  });
+  document.getElementById('btn-prev').disabled = (currentPage === 1);
+  document.getElementById('btn-next').disabled = (currentPage === TOTAL_PAGES);
+  window.scrollTo(0,0);
+}
+document.getElementById('btn-prev').addEventListener('click', () => goToPage(currentPage - 1));
+document.getElementById('btn-next').addEventListener('click', () => goToPage(currentPage + 1));
+document.querySelectorAll('.page-tabs button').forEach(btn => {
+  btn.addEventListener('click', () => goToPage(Number(btn.dataset.page)));
+});
+
+/* ===================== 1번 페이지: 연락처 + QR + 삭제 ===================== */
+function generateQR(phone){
+  const qrBox = document.getElementById('qr-box');
+  const qrCaption = document.getElementById('qr-caption');
+  const qrDiv = document.getElementById('qrcode');
+  qrBox.style.display = 'flex';
+  qrCaption.textContent = phone + ' 로 문자 보내기';
+  qrDiv.innerHTML = '';
+  new QRCode(qrDiv, {
+    text: 'sms:' + phone,
+    width: 200,
+    height: 200,
+    colorDark: '#20242C',
+    colorLight: '#ffffff'
+  });
+
+  // 크게 보기 화면용 QR도 함께 생성
+  const qrDivFull = document.getElementById('qrcode-full');
+  qrDivFull.innerHTML = '';
+  new QRCode(qrDivFull, {
+    text: 'sms:' + phone,
+    width: 260,
+    height: 260,
+    colorDark: '#20242C',
+    colorLight: '#ffffff'
+  });
+}
+
+document.getElementById('btn-qr-expand').addEventListener('click', () => {
+  document.getElementById('qr-fullview').classList.add('show');
+});
+document.getElementById('btn-qr-collapse').addEventListener('click', () => {
+  document.getElementById('qr-fullview').classList.remove('show');
+});
+document.getElementById('btn-back-to-qr').addEventListener('click', () => {
+  document.getElementById('qr-fullview').classList.add('show');
+});
+
+/* ===================== 번호 잠금 (비밀번호: 전화번호 끝 2자리) ===================== */
+let pwPendingPhone = null;
+let pwPendingName = null;
+let lastUnlockedName = null; // 마지막으로 비밀번호를 맞춰 확인한 저장된 이름 (그림 저장 시 사용)
+
+function openPasswordModal(name, phone){
+  pwPendingPhone = phone;
+  pwPendingName = name;
+  document.getElementById('pw-modal-title').textContent = name + '님의 번호 확인';
+  document.getElementById('pw-modal-hint').textContent = '힌트: ' + name + '님 번호의 끝 2자리';
+  document.getElementById('pw-modal-input').value = '';
+  document.getElementById('pw-modal-error').textContent = '';
+  document.getElementById('pw-modal').classList.add('show');
+  setTimeout(() => document.getElementById('pw-modal-input').focus(), 50);
+}
+function closePasswordModal(){
+  document.getElementById('pw-modal').classList.remove('show');
+  pwPendingPhone = null;
+  pwPendingName = null;
+}
+document.getElementById('pw-modal-cancel').addEventListener('click', closePasswordModal);
+document.getElementById('pw-modal-submit').addEventListener('click', () => {
+  const entered = document.getElementById('pw-modal-input').value.trim();
+  const correct = (pwPendingPhone || '').slice(-2);
+  if(entered.length === 2 && entered === correct){
+    const phone = pwPendingPhone;
+    lastUnlockedName = pwPendingName;
+    closePasswordModal();
+    generateQR(phone);
+  } else {
+    document.getElementById('pw-modal-error').textContent = '비밀번호가 올바르지 않습니다.';
+  }
+});
+document.getElementById('pw-modal-input').addEventListener('keydown', (e) => {
+  if(e.key === 'Enter'){ document.getElementById('pw-modal-submit').click(); }
+});
+
+function renderContactList(snapshot){
+  const list = document.getElementById('contact-list');
+  list.innerHTML = '';
+  if(snapshot.empty){
+    list.innerHTML = '<li style="color:var(--text-soft);">아직 저장된 번호가 없어요</li>';
+    return;
+  }
+  snapshot.forEach(doc => {
+    const data = doc.data();
+    const li = document.createElement('li');
+
+    const info = document.createElement('div');
+    info.className = 'c-info';
+    info.innerHTML =
+      '<span class="c-name">🔒 ' + data.name + '</span>' +
+      '<span class="c-phone">눌러서 비밀번호 입력</span>';
+    info.addEventListener('click', () => openPasswordModal(data.name, data.phone));
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'c-delete';
+    delBtn.textContent = '✕';
+    delBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if(confirm(data.name + ' 번호를 삭제할까요?')){
+        contactsRef.doc(doc.id).delete().catch(err => {
+          alert('삭제 중 오류가 발생했습니다.');
+          console.error(err);
+        });
+      }
+    });
+
+    li.appendChild(info);
+    li.appendChild(delBtn);
+    list.appendChild(li);
+  });
+}
+
+contactsRef.orderBy('createdAt', 'desc').onSnapshot(renderContactList,
+  (err) => { console.warn('Firestore 연결 확인 필요:', err); }
+);
+
+document.getElementById('btn-save-contact').addEventListener('click', () => {
+  const nameInput = document.getElementById('input-name');
+  const phoneInput = document.getElementById('input-phone');
+  const name = nameInput.value.trim();
+  const phone = phoneInput.value.trim().replace(/[^0-9]/g, '');
+
+  if(!name){ alert('이름을 입력해주세요'); return; }
+  if(phone.length < 7){ alert('전화번호를 정확히 입력해주세요'); return; }
+
+  contactsRef.add({
+    name: name,
+    phone: phone,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(() => {
+    generateQR(phone);
+    nameInput.value = '';
+    phoneInput.value = '';
+  }).catch(err => {
+    alert('저장 중 오류가 발생했습니다. Firebase 설정을 확인해주세요.');
+    console.error(err);
+  });
+});
+
+/* ===================== 3번 페이지: 식별번호 + MBTI + 분석 ===================== */
+
+const scanNumberBox = document.getElementById('scanid-number');
+scanNumberBox.addEventListener('input', (e) => {
+  e.target.value = e.target.value.replace(/[^0-9]/g, '');
+});
+
+function getScanId(){
+  return scanNumberBox.value || '';
+}
+
+document.querySelectorAll('.mbti-box').forEach(box => {
+  box.addEventListener('click', () => {
+    const isOn = box.classList.toggle('on');
+    box.textContent = isOn ? box.dataset.a : box.dataset.b;
+  });
+});
+
+function getSelectedMBTI(){
+  let code = '';
+  document.querySelectorAll('.mbti-box').forEach(box => {
+    code += box.classList.contains('on') ? box.dataset.a : box.dataset.b;
+  });
+  return code;
+}
+
+document.getElementById('btn-analyze').addEventListener('click', () => {
+  const overlay = document.getElementById('scan-overlay');
+  overlay.classList.add('show');
+
+  setTimeout(() => {
+    overlay.classList.remove('show');
+
+    const code = getSelectedMBTI();
+    const fileName = toTitleCaseMBTI(code); // 예: INTP -> Intp
+    const scanId = getScanId();
+    const resultBlock = document.getElementById('mbti-result');
+    const frame = document.getElementById('mbti-result-frame');
+
+    frame.innerHTML =
+      '<img src="' + IMAGE_PATHS.mbtiFolder + fileName + '.png" alt="' + code + '" ' +
+      'onerror="this.style.display=\'none\'; this.nextElementSibling.style.display=\'block\';">' +
+      '<div class="img-fallback" style="display:none;">' + IMAGE_PATHS.mbtiFolder + fileName + '.png 파일을 넣어주세요</div>' +
+      '<div class="id-overlay">' + scanId + ' 분석 결과</div>';
+
+    resultBlock.style.display = 'block';
+  }, 1750);
+});
+
+/* ===================== 3번 페이지: 그림판 (자유롭게 그리기) ===================== */
+let savedDrawingDataUrl = null; // 그려둔 그림 (data URL). 4페이지 저장에서도 재사용
+
+const drawThumb = document.getElementById('draw-thumb');
+const drawFullscreen = document.getElementById('draw-fullscreen');
+const drawCanvas = document.getElementById('draw-canvas');
+const drawCtx = drawCanvas.getContext('2d');
+
+let isDrawing = false;
+let lastX = 0, lastY = 0;
+
+function resizeAndRestoreCanvas(){
+  drawCanvas.width = window.innerWidth;
+  drawCanvas.height = window.innerHeight;
+  drawCtx.fillStyle = '#ffffff';
+  drawCtx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
+  drawCtx.lineJoin = 'round';
+  drawCtx.lineCap = 'round';
+  drawCtx.lineWidth = 5;
+  drawCtx.strokeStyle = '#20242C';
+
+  if(savedDrawingDataUrl){
+    const img = new Image();
+    img.onload = () => { drawCtx.drawImage(img, 0, 0, drawCanvas.width, drawCanvas.height); };
+    img.src = savedDrawingDataUrl;
+  }
+}
+
+function openDrawFullscreen(){
+  drawFullscreen.classList.add('show');
+  resizeAndRestoreCanvas();
+}
+function closeDrawFullscreen(){
+  drawFullscreen.classList.remove('show');
+}
+
+function getCanvasPos(e){
+  const rect = drawCanvas.getBoundingClientRect();
+  const point = e.touches ? e.touches[0] : e;
+  return { x: point.clientX - rect.left, y: point.clientY - rect.top };
+}
+
+function startDraw(e){
+  e.preventDefault();
+  isDrawing = true;
+  const p = getCanvasPos(e);
+  lastX = p.x; lastY = p.y;
+}
+function moveDraw(e){
+  if(!isDrawing) return;
+  e.preventDefault();
+  const p = getCanvasPos(e);
+  drawCtx.beginPath();
+  drawCtx.moveTo(lastX, lastY);
+  drawCtx.lineTo(p.x, p.y);
+  drawCtx.stroke();
+  lastX = p.x; lastY = p.y;
+}
+function endDraw(){ isDrawing = false; }
+
+drawCanvas.addEventListener('mousedown', startDraw);
+drawCanvas.addEventListener('mousemove', moveDraw);
+window.addEventListener('mouseup', endDraw);
+drawCanvas.addEventListener('touchstart', startDraw, {passive:false});
+drawCanvas.addEventListener('touchmove', moveDraw, {passive:false});
+drawCanvas.addEventListener('touchend', endDraw);
+
+drawThumb.addEventListener('click', openDrawFullscreen);
+
+document.getElementById('btn-draw-clear').addEventListener('click', () => {
+  drawCtx.fillStyle = '#ffffff';
+  drawCtx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
+});
+
+document.getElementById('btn-draw-save-close').addEventListener('click', () => {
+  savedDrawingDataUrl = drawCanvas.toDataURL('image/png');
+  drawThumb.innerHTML = '<img src="' + savedDrawingDataUrl + '" alt="그림">';
+  closeDrawFullscreen();
+});
+
+/* ===================== 4번 페이지: 그림 저장 & 저장 리스트 ===================== */
+const drawingsRef = db.collection('drawings');
+const drawSaveView = document.getElementById('draw-save-view');
+const saveListView = document.getElementById('save-list-view');
+
+document.getElementById('btn-draw-save').addEventListener('click', () => {
+  if(!savedDrawingDataUrl){
+    alert('먼저 3번째 페이지에서 그림을 그려주세요.');
+    return;
+  }
+  document.getElementById('draw-save-preview-img').src = savedDrawingDataUrl;
+  document.getElementById('draw-save-name').value = lastUnlockedName || '';
+  drawSaveView.classList.add('show');
+});
+document.getElementById('btn-draw-save-view-close').addEventListener('click', () => {
+  drawSaveView.classList.remove('show');
+});
+document.getElementById('btn-draw-save-confirm').addEventListener('click', () => {
+  const name = document.getElementById('draw-save-name').value.trim();
+  if(!name){ alert('저장 이름을 입력해주세요.'); return; }
+
+  drawingsRef.add({
+    name: name,
+    scanId: getScanId(),
+    dataUrl: savedDrawingDataUrl,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(() => {
+    drawSaveView.classList.remove('show');
+  }).catch(err => {
+    alert('저장 중 오류가 발생했습니다.');
+    console.error(err);
+  });
+});
+
+document.getElementById('btn-save-list').addEventListener('click', () => {
+  saveListView.classList.add('show');
+});
+document.getElementById('btn-save-list-close').addEventListener('click', () => {
+  saveListView.classList.remove('show');
+});
+
+function formatSavedTime(ts){
+  if(!ts || !ts.toDate) return '';
+  const d = ts.toDate();
+  return d.getFullYear() + '.' + String(d.getMonth()+1).padStart(2,'0') + '.' + String(d.getDate()).padStart(2,'0') +
+    ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+
+function renderSaveList(snapshot){
+  const list = document.getElementById('save-list');
+  list.innerHTML = '';
+  if(snapshot.empty){
+    list.innerHTML = '<li style="color:var(--text-soft); justify-content:center;">아직 저장된 그림이 없어요</li>';
+    return;
+  }
+  snapshot.forEach(doc => {
+    const data = doc.data();
+    const li = document.createElement('li');
+
+    const thumb = document.createElement('div');
+    thumb.className = 'sl-thumb';
+    thumb.innerHTML = '<img src="' + data.dataUrl + '" alt="' + data.name + '">';
+
+    const info = document.createElement('div');
+    info.className = 'sl-info';
+    info.innerHTML =
+      '<div class="sl-name">' + data.name + '</div>' +
+      '<div class="sl-meta">식별번호 ' + (data.scanId || '-') + ' · ' + formatSavedTime(data.createdAt) + '</div>';
+
+    const openLarge = () => {
+      const lb = document.getElementById('lightbox');
+      const lbImg = document.getElementById('lightbox-img');
+      const idTag = document.getElementById('lightbox-id-tag');
+      lbImg.src = data.dataUrl;
+      lbImg.style.transform = 'translate(0px,0px) scale(1)';
+      idTag.classList.remove('show');
+      lb.classList.add('show');
+    };
+    thumb.style.cursor = 'pointer';
+    info.style.cursor = 'pointer';
+    thumb.addEventListener('click', openLarge);
+    info.addEventListener('click', openLarge);
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'sl-delete';
+    delBtn.textContent = '✕';
+    delBtn.addEventListener('click', () => {
+      if(confirm(data.name + ' 그림을 삭제할까요?')){
+        drawingsRef.doc(doc.id).delete().catch(err => {
+          alert('삭제 중 오류가 발생했습니다.');
+          console.error(err);
+        });
+      }
+    });
+
+    li.appendChild(thumb);
+    li.appendChild(info);
+    li.appendChild(delBtn);
+    list.appendChild(li);
+  });
+}
+
+drawingsRef.orderBy('createdAt', 'desc').onSnapshot(renderSaveList,
+  (err) => { console.warn('Firestore(drawings) 연결 확인 필요:', err); }
+);
+
+/* ===================== 이미지 확대(핀치줌/이동 가능한 라이트박스) ===================== */
+const lightbox = document.getElementById('lightbox');
+const lightboxImg = document.getElementById('lightbox-img');
+
+let lbScale = 1, lbX = 0, lbY = 0;
+let lbStartScale = 1, lbStartDist = 0;
+let lbPanning = false, lbPanStart = {x:0, y:0}, lbPanOrigin = {x:0, y:0};
+
+function applyLbTransform(){
+  lightboxImg.style.transform = 'translate(' + lbX + 'px,' + lbY + 'px) scale(' + lbScale + ')';
+}
+function resetLbTransform(){
+  lbScale = 1; lbX = 0; lbY = 0;
+  applyLbTransform();
+}
+
+document.addEventListener('click', (e) => {
+  if(e.target.tagName === 'IMG' && e.target.closest('.image-frame')){
+    lightboxImg.src = e.target.src;
+    resetLbTransform();
+
+    const idTag = document.getElementById('lightbox-id-tag');
+    if(e.target.closest('#mbti-result-frame')){
+      idTag.textContent = getScanId();
+      idTag.classList.add('show');
+    } else {
+      idTag.classList.remove('show');
+    }
+
+    lightbox.classList.add('show');
+  }
+});
+document.getElementById('lightbox-close').addEventListener('click', () => {
+  lightbox.classList.remove('show');
+});
+lightbox.addEventListener('click', (e) => {
+  if(e.target.id === 'lightbox') lightbox.classList.remove('show');
+});
+
+function touchDistance(t1, t2){
+  return Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+}
+
+lightboxImg.addEventListener('touchstart', (e) => {
+  if(e.touches.length === 2){
+    e.preventDefault();
+    lbStartDist = touchDistance(e.touches[0], e.touches[1]);
+    lbStartScale = lbScale;
+    lbPanning = false;
+  } else if(e.touches.length === 1 && lbScale > 1.02){
+    e.preventDefault();
+    lbPanning = true;
+    lbPanStart = {x:e.touches[0].clientX, y:e.touches[0].clientY};
+    lbPanOrigin = {x:lbX, y:lbY};
+  }
+}, {passive:false});
+
+lightboxImg.addEventListener('touchmove', (e) => {
+  if(e.touches.length === 2){
+    e.preventDefault();
+    const dist = touchDistance(e.touches[0], e.touches[1]);
+    lbScale = Math.min(Math.max(lbStartScale * (dist / lbStartDist), 1), 4);
+    applyLbTransform();
+  } else if(e.touches.length === 1 && lbPanning){
+    e.preventDefault();
+    const dx = e.touches[0].clientX - lbPanStart.x;
+    const dy = e.touches[0].clientY - lbPanStart.y;
+    const bound = 120 * lbScale;
+    lbX = Math.min(Math.max(lbPanOrigin.x + dx, -bound), bound);
+    lbY = Math.min(Math.max(lbPanOrigin.y + dy, -bound), bound);
+    applyLbTransform();
+  }
+}, {passive:false});
+
+lightboxImg.addEventListener('touchend', (e) => {
+  lbPanning = false;
+  if(e.touches.length === 0 && lbScale < 1.02){
+    resetLbTransform();
+  }
+});
+
+goToPage(1);
+</script>
+</body>
+</html>
