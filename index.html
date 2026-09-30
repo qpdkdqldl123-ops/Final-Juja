@@ -8,9 +8,9 @@
 <!-- ============================================================
   이 html 파일과 "같은 폴더"에 아래 파일들을 그대로 넣어주세요 (하위 폴더 없이 평평하게).
     iob.jpg                ← 좌측 상단 로고
-    분석과정.png              ← 2번 페이지 이미지
-    지원금.png               ← 4번 페이지 상단 이미지
-    전체결과.png              ← 4번 페이지 하단 이미지
+    지원금.png               ← 2번 페이지 상단 이미지
+    분석과정.png              ← 2번 페이지 하단 이미지
+    전체결과.png              ← 4번 페이지 이미지
     Intj.png Intp.png Entj.png Entp.png
     Infj.png Infp.png Enfj.png Enfp.png
     Istj.png Isfj.png Estj.png Esfj.png
@@ -377,10 +377,18 @@
     </div>
   </section>
 
-  <!-- ============ 2. 분석과정 사진 ============ -->
+  <!-- ============ 2. 지원금 / 분석과정 사진 ============ -->
   <section class="page" id="page-2">
     <h2 class="page-title">분석과정</h2>
-    <p class="page-sub">스크린타임 데이터를 읽어들이는 중입니다.</p>
+
+    <p class="page-sub" style="margin-top:16px;">지원금</p>
+    <div class="image-frame">
+      <img src="지원금.png" alt="지원금"
+           onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+      <div class="img-fallback" style="display:none;">지원금.png 파일을 같은 폴더에 넣어주세요</div>
+    </div>
+
+    <p class="page-sub" style="margin-top:18px;">스크린타임 데이터를 읽어들이는 중입니다.</p>
     <div class="image-frame">
       <img src="분석과정.png" alt="분석과정"
            onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
@@ -428,14 +436,7 @@
   <section class="page" id="page-4">
     <h2 class="page-title">전체 결과 분석지</h2>
 
-    <p class="page-sub" style="margin-top:16px;">지원금</p>
-    <div class="image-frame">
-      <img src="지원금.png" alt="지원금"
-           onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-      <div class="img-fallback" style="display:none;">지원금.png 파일을 같은 폴더에 넣어주세요</div>
-    </div>
-
-    <p class="page-sub" style="margin-top:18px;">전체결과</p>
+    <p class="page-sub" style="margin-top:16px;">전체결과</p>
     <div class="image-frame">
       <img src="전체결과.png" alt="전체결과"
            onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
